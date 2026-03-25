@@ -103,7 +103,7 @@ export default function LiffFormPage() {
             <Input label="入住人數" required value={form.residents} onChange={v => set('residents', v)} type="number" placeholder="例：2" />
             <Select label="同住人關係" value={form.relationship} onChange={v => set('relationship', v)} options={['單獨', '夫妻/伴侶', '家人', '室友', '其他']} />
             <Input label="居住人年齡" required value={form.age} onChange={v => set('age', v)} placeholder="例：28" />
-            <Select label="居住人職業" value={form.occupation} onChange={v => set('occupation', v)} options={['上班族', '學生', '自營業', '退休', '其他']} />
+            <Input label="居住人職業" value={form.occupation} onChange={v => set('occupation', v)} placeholder="例：上班族、學生" />
             <Input label="公司/學校" value={form.company} onChange={v => set('company', v)} placeholder="選填" />
           </Card>
         )}
