@@ -10,8 +10,16 @@ export async function initGoogleSheets() {
   if (sheetsAPI) return sheetsAPI;
 
   try {
-    const keyFilePath = path.resolve(process.cwd(), '..', 'mapserch-483507-71e31311e1cf.json');
-    const keyFile = JSON.parse(fs.readFileSync(keyFilePath, 'utf-8'));
+    let keyFile;
+
+    // 優先讀取環境變數（用於 Vercel）
+    if (process.env.GOOGLE_SERVICE_KEY) {
+      keyFile = JSON.parse(process.env.GOOGLE_SERVICE_KEY);
+    } else {
+      // 本地開發環境讀取檔案
+      const keyFilePath = path.resolve(process.cwd(), '..', 'mapserch-483507-71e31311e1cf.json');
+      keyFile = JSON.parse(fs.readFileSync(keyFilePath, 'utf-8'));
+    }
 
     const auth = new google.auth.GoogleAuth({
       credentials: keyFile,
