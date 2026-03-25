@@ -13,6 +13,17 @@ export interface PropertyData {
   [key: string]: any;
 }
 
+// Excel 日期序號轉 YYYY/MM/DD
+function excelDateToString(serial: number): string {
+  const utc_days = Math.floor(serial - 25569);
+  const utc_value = utc_days * 86400 * 1000;
+  const date = new Date(utc_value);
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(date.getUTCDate()).padStart(2, '0');
+  return `${y}/${m}/${d}`;
+}
+
 export async function parseRagicExcel(
   buffer: Buffer,
   sheetName?: string
@@ -39,15 +50,25 @@ export async function parseRagicExcel(
     }
 
     const worksheet = workbook.Sheets[targetSheet];
-    const rows = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+    const rows = XLSX.utils.sheet_to_json(worksheet, { defval: '', raw: true });
 
-    // 清除所有欄位名稱的前後空白，並回傳原始行
+    // 日期欄位名稱列表
+    const dateFields = ['委託時間(起)', '委託時間(迄)', '建築完成日期(民國)', '廣告到期時間']
+
+    // 清除所有欄位名稱的前後空白，並轉換日期格式
     return rows
       .filter((row: any) => Object.values(row).some(v => v !== null && v !== undefined && v !== ''))
       .map((row: any) => {
         const cleaned: any = {};
         for (const key of Object.keys(row)) {
-          cleaned[key.trim()] = row[key];
+          const cleanKey = key.trim();
+          const val = row[key];
+          // 日期欄位：把 Excel 序號轉成 YYYY/MM/DD
+          if (dateFields.includes(cleanKey) && typeof val === 'number') {
+            cleaned[cleanKey] = excelDateToString(val);
+          } else {
+            cleaned[cleanKey] = val;
+          }
         }
         return cleaned;
       });
