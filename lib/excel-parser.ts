@@ -16,7 +16,7 @@ export interface PropertyData {
 export async function parseRagicExcel(
   buffer: Buffer,
   sheetName?: string
-): Promise<PropertyData[]> {
+): Promise<any[]> {
   try {
     const workbook = XLSX.read(buffer, { type: 'buffer' });
 
@@ -41,12 +41,11 @@ export async function parseRagicExcel(
     const worksheet = workbook.Sheets[targetSheet];
     const rows = XLSX.utils.sheet_to_json(worksheet);
 
-    return rows
-      .filter((row: any) => {
-        // Filter out empty rows
-        return Object.values(row).some(v => v !== null && v !== undefined && v !== '');
-      })
-      .map((row: any) => normalizePropertyData(row));
+    // 直接回傳原始行，保留所有欄位
+    return rows.filter((row: any) => {
+      // Filter out empty rows
+      return Object.values(row).some(v => v !== null && v !== undefined && v !== '');
+    });
   } catch (error) {
     console.error('Error parsing Ragic Excel:', error);
     throw error;
