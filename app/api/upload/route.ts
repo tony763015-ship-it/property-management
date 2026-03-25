@@ -141,9 +141,8 @@ export async function POST(request: NextRequest) {
           newCount++
         }
 
-        // 判斷狀態：Ragic 中如果不是「委託中」或「在租」，就標記隱藏
-        const activeStatuses = ['委託中', '在租', '']
-        const status = activeStatuses.includes(ragicStatus) ? '在租' : '已出租'
+        // 直接保留 Ragic 原始狀態
+        const status = ragicStatus || '在租'
 
         const rowData = REQUIRED_COLUMNS.map(field => {
           if (field === '編號') return code
