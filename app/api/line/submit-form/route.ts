@@ -63,7 +63,11 @@ export async function POST(request: NextRequest) {
         const petAllowed = (row[petsIdx] || '').toString()
 
         if (status !== '委託中' && status !== '在租') return false
-        if (form.area && !district.includes(form.area.replace('區', ''))) return false
+        if (form.area) {
+          const keywords = form.area.split(/[,，、\s]+/).map((k: string) => k.replace('區', '').trim()).filter(Boolean)
+          const matched = keywords.some((k: string) => district.includes(k))
+          if (!matched) return false
+        }
         if (form.roomType && !roomType.includes(form.roomType.replace('房', ''))) return false
         if (price > budget) return false
         if (form.pets && form.pets !== '沒有' && petAllowed === '不可') return false
