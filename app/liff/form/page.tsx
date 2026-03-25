@@ -71,7 +71,7 @@ export default function LiffFormPage() {
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc', paddingBottom: '90px' }}>
       {/* Header */}
-      <div style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', padding: '1.25rem 1rem 1.5rem', position: 'sticky', top: 0, zIndex: 10 }}>
+      <div style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', padding: '1.25rem 1rem 1.5rem' }}>
         <div style={{ maxWidth: '480px', margin: '0 auto' }}>
           <h1 style={{ color: 'white', fontSize: '1.1rem', fontWeight: '700', margin: 0 }}>🏠 優式租賃 · 租屋需求</h1>
           {/* Progress */}
