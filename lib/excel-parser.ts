@@ -39,13 +39,18 @@ export async function parseRagicExcel(
     }
 
     const worksheet = workbook.Sheets[targetSheet];
-    const rows = XLSX.utils.sheet_to_json(worksheet);
+    const rows = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
 
-    // 直接回傳原始行，保留所有欄位
-    return rows.filter((row: any) => {
-      // Filter out empty rows
-      return Object.values(row).some(v => v !== null && v !== undefined && v !== '');
-    });
+    // 清除所有欄位名稱的前後空白，並回傳原始行
+    return rows
+      .filter((row: any) => Object.values(row).some(v => v !== null && v !== undefined && v !== ''))
+      .map((row: any) => {
+        const cleaned: any = {};
+        for (const key of Object.keys(row)) {
+          cleaned[key.trim()] = row[key];
+        }
+        return cleaned;
+      });
   } catch (error) {
     console.error('Error parsing Ragic Excel:', error);
     throw error;
