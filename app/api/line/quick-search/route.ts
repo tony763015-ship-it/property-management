@@ -37,7 +37,13 @@ export async function POST(request: NextRequest) {
       const unavailable = ['已收訂等簽約', '維修中', '即將開放', '整理中', '下架']
       if (unavailable.some(s => status.includes(s))) return false
       if (district && !rowDistrict.includes(district.replace('區', ''))) return false
-      if (roomType && !rowRoomType.includes(roomType.replace('房', ''))) return false
+      if (roomType) {
+        if (roomType === '套房') {
+          if (!rowRoomType.includes('套房')) return false
+        } else {
+          if (!rowRoomType.startsWith(roomType.replace('房', '') + '房')) return false
+        }
+      }
       if (price > budgetNum) return false
       if (pets && pets !== '不限' && petAllowed === '不可') return false
 

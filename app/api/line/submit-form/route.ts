@@ -69,7 +69,13 @@ export async function POST(request: NextRequest) {
           const matched = keywords.some((k: string) => district.includes(k))
           if (!matched) return false
         }
-        if (form.roomType && !roomType.includes(form.roomType.replace('房', ''))) return false
+        if (form.roomType) {
+          if (form.roomType === '套房') {
+            if (!roomType.includes('套房')) return false
+          } else {
+            if (!roomType.startsWith(form.roomType.replace('房', '') + '房')) return false
+          }
+        }
         if (price > budget) return false
         if (form.pets && form.pets !== '沒有' && petAllowed === '不可') return false
 
