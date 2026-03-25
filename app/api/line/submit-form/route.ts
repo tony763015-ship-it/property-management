@@ -62,7 +62,8 @@ export async function POST(request: NextRequest) {
         const price = parseInt(row[priceIdx] || '0')
         const petAllowed = (row[petsIdx] || '').toString()
 
-        if (status !== '委託中' && status !== '在租') return false
+        const unavailable = ['已收訂等簽約', '維修中', '即將開放', '整理中', '下架']
+        if (unavailable.some(s => status.includes(s))) return false
         if (form.area) {
           const keywords = form.area.split(/[,，、\s]+/).map((k: string) => k.replace('區', '').trim()).filter(Boolean)
           const matched = keywords.some((k: string) => district.includes(k))
