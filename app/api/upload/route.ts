@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { parseRagicExcel } from '../../../lib/excel-parser'
 import { generateCode, initializeCodeGenerator } from '../../../lib/code-generator'
-import { getSheetData, appendSheetData, ensureSheetExists } from '../../../lib/google-sheets'
+import { getSheetData, appendSheetData, ensureSheetExists, clearSheet, updateSheetData } from '../../../lib/google-sheets'
 
 const SHEET_ID = process.env.NEXT_PUBLIC_SHEET_ID || ''
 
@@ -72,13 +72,17 @@ export async function POST(request: NextRequest) {
     // Initialize code generator
     await initializeCodeGenerator()
 
-    // Get existing properties from Google Sheet (skip if sheet doesn't exist yet)
-    let existingAddresses = new Set<string>()
+    // 讀取現有物件（保留已有編號，避免重新編碼）
+    const existingCodeMap = new Map<string, string>() // address -> 編號
     try {
-      const existingData = await getSheetData(SHEET_ID, '物件總表!E:E')
-      existingAddresses = new Set(
-        existingData.slice(1).map(row => row[0]?.toString().toLowerCase().trim())
-      )
+      const existingData = await getSheetData(SHEET_ID, '物件總表!A:E')
+      if (existingData.length > 1) {
+        for (let i = 1; i < existingData.length; i++) {
+          const code = (existingData[i][0] || '').toString().trim()
+          const address = (existingData[i][4] || '').toString().toLowerCase().trim()
+          if (address && code) existingCodeMap.set(address, code)
+        }
+      }
     } catch (error: any) {
       console.log('無既存物件資料')
     }
@@ -86,69 +90,64 @@ export async function POST(request: NextRequest) {
     // Process properties
     const newRows = []
     let newCount = 0
-    let duplicateCount = 0
+    let updateCount = 0
     let errorCount = 0
     const errors: string[] = []
 
     for (let i = 0; i < ragicData.length; i++) {
       try {
         const prop = ragicData[i]
-
-        // Check for duplicates by address
         const address = (prop['地址'] || '').toString().toLowerCase().trim()
-        if (!address || existingAddresses.has(address)) {
-          if (address) duplicateCount++
-          continue
-        }
+        if (!address) continue
 
-        // 提取編碼需要的資訊
         const city = (prop['縣市'] || '').toString().trim()
         const district = (prop['鄉鎮市區'] || '').toString().trim()
         const roomType = (prop['格局'] || '').toString().trim()
 
-        // Generate code
-        const code = await generateCode(city, district, roomType)
+        // 使用現有編號，或生成新編號
+        const code = existingCodeMap.has(address)
+          ? existingCodeMap.get(address)!
+          : await generateCode(city, district, roomType)
 
-        // 建立新列，只包含指定欄位
+        if (existingCodeMap.has(address)) {
+          updateCount++
+        } else {
+          newCount++
+        }
+
         const newRow: any = {}
         REQUIRED_COLUMNS.forEach(field => {
-          if (field === '編號') {
-            newRow[field] = code
-          } else if (field === '狀態') {
-            newRow[field] = prop['狀態'] || '在租'
-          } else {
-            // 直接從 Ragic 原始資料取值
-            newRow[field] = prop[field] || ''
-          }
+          if (field === '編號') newRow[field] = code
+          else if (field === '狀態') newRow[field] = prop['狀態'] || '在租'
+          else newRow[field] = prop[field] !== undefined ? prop[field] : ''
         })
-
         newRows.push(newRow)
-        newCount++
       } catch (err: any) {
         errorCount++
         errors.push(`第 ${i + 1} 筆：${err.message}`)
       }
     }
 
-    // Append to Google Sheet
-    if (newRows.length > 0) {
-      // 按照定義的順序建立資料列
-      const dataRows = newRows.map(row =>
-        REQUIRED_COLUMNS.map(field => row[field] || '')
-      )
+    // 清空物件總表，重新寫入
+    await clearSheet(SHEET_ID, '物件總表!A:Z')
 
-      await appendSheetData(SHEET_ID, '物件總表!A1', [
-        REQUIRED_COLUMNS,
-        ...dataRows,
-      ])
+    if (newRows.length > 0) {
+      const dataRows = newRows.map(row =>
+        REQUIRED_COLUMNS.map(field => {
+          const val = row[field]
+          return val !== null && val !== undefined ? String(val) : ''
+        })
+      )
+      await appendSheetData(SHEET_ID, '物件總表!A1', [REQUIRED_COLUMNS, ...dataRows])
     }
 
     return NextResponse.json({
       processedCount: ragicData.length,
       newCount,
-      duplicateCount,
+      updateCount,
       errorCount,
       errors: errors.length > 0 ? errors : null,
+      message: `✅ 新增 ${newCount} 筆，更新 ${updateCount} 筆`,
     })
   } catch (error: any) {
     console.error('Upload error:', error)
