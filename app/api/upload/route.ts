@@ -65,6 +65,12 @@ export async function POST(request: NextRequest) {
     let errorCount = 0
     const errors: string[] = []
 
+    // 收集所有可能的欄位名稱
+    const allFieldNames = new Set<string>()
+    properties.forEach(prop => {
+      Object.keys(prop).forEach(key => allFieldNames.add(key))
+    })
+
     for (let i = 0; i < properties.length; i++) {
       try {
         const prop = properties[i]
@@ -79,21 +85,13 @@ export async function POST(request: NextRequest) {
         // Generate code
         const code = await generateCode(prop.city, prop.district, prop.roomType)
 
-        // Add to rows
-        newRows.push([
-          code,
-          prop.city,
-          prop.district,
-          prop.address,
-          prop.roomType,
-          prop.price,
-          '在租', // Default status
-          prop.area || '',
-          prop.floor || '',
-          prop.phone || '',
-          prop.remarks || '',
-        ])
+        // 建立新列，包含所有欄位
+        const newRow: any = { 編碼: code, 狀態: '在租' }
+        allFieldNames.forEach(field => {
+          newRow[field] = prop[field] || ''
+        })
 
+        newRows.push(newRow)
         newCount++
       } catch (err: any) {
         errorCount++
@@ -103,9 +101,17 @@ export async function POST(request: NextRequest) {
 
     // Append to Google Sheet
     if (newRows.length > 0) {
+      // 建立標題列（包含編碼、狀態 + 所有原始欄位）
+      const headerRow = ['編碼', '狀態', ...Array.from(allFieldNames).sort()]
+
+      // 建立資料列
+      const dataRows = newRows.map(row =>
+        [row.編碼, row.狀態, ...Array.from(allFieldNames).sort().map(field => row[field] || '')]
+      )
+
       await appendSheetData(SHEET_ID, '物件總表!A1', [
-        ['編碼', '城市', '行政區', '地址', '房型', '租金', '狀態', '坪數', '樓層', '聯絡電話', '備註'],
-        ...newRows,
+        headerRow,
+        ...dataRows,
       ])
     }
 
