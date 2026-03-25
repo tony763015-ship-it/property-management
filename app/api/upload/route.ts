@@ -69,23 +69,33 @@ export async function POST(request: NextRequest) {
     await ensureSheetExists(SHEET_ID, '地區編碼對照')
     await ensureSheetExists(SHEET_ID, '序號記錄')
 
-    // Initialize code generator
-    await initializeCodeGenerator()
-
     // 讀取現有物件（保留已有編號，避免重新編碼）
     const existingCodeMap = new Map<string, string>() // address -> 編號
+    // 同時計算每個 seqKey 的已用序號，讓新物件從正確序號開始
+    const existingSeqMap = new Map<string, number>() // seqKey -> 最大序號
     try {
       const existingData = await getSheetData(SHEET_ID, '物件總表!A:E')
       if (existingData.length > 1) {
         for (let i = 1; i < existingData.length; i++) {
           const code = (existingData[i][0] || '').toString().trim()
           const address = (existingData[i][4] || '').toString().toLowerCase().trim()
-          if (address && code) existingCodeMap.set(address, code)
+          if (address && code) {
+            existingCodeMap.set(address, code)
+            // 從編號提取 seqKey 和序號 (例：AA2001 → seqKey=AA2, seq=1)
+            const seqKey = code.slice(0, 3)
+            const seq = parseInt(code.slice(3)) || 0
+            if (!existingSeqMap.has(seqKey) || existingSeqMap.get(seqKey)! < seq) {
+              existingSeqMap.set(seqKey, seq)
+            }
+          }
         }
       }
     } catch (error: any) {
       console.log('無既存物件資料')
     }
+
+    // Initialize code generator with existing sequences
+    await initializeCodeGenerator(existingSeqMap)
 
     // Process properties
     const newRows = []

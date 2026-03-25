@@ -17,15 +17,13 @@ let districtCodeMap: DistrictCodeMap = {};
 let sequenceMap: SequenceMap = {};
 let nextCityIndex: { [city: string]: number } = {};
 
-export async function initializeCodeGenerator() {
+export async function initializeCodeGenerator(existingSeqMap?: Map<string, number>) {
   try {
     // Load district codes from Google Sheet
     const districtData = await getSheetData(SHEET_ID, '地區編碼對照!A:D');
     districtCodeMap = {};
     nextCityIndex = {};
 
-    // Parse district codes
-    // Expected format: City | District | CityCode | DistrictCode
     for (let i = 1; i < districtData.length; i++) {
       const row = districtData[i];
       if (row.length >= 4) {
@@ -35,36 +33,22 @@ export async function initializeCodeGenerator() {
         const districtCode = row[3]?.toString().trim();
 
         if (city && district && cityCode && districtCode) {
-          if (!districtCodeMap[city]) {
-            districtCodeMap[city] = {};
-          }
+          if (!districtCodeMap[city]) districtCodeMap[city] = {};
           districtCodeMap[city][district] = districtCode;
 
-          // Track next index for each city
-          if (!nextCityIndex[city]) {
-            nextCityIndex[city] = 0;
-          }
-          const nextIdx = districtCode.charCodeAt(0) - 64; // A=1, B=2...
+          if (!nextCityIndex[city]) nextCityIndex[city] = 0;
+          const nextIdx = districtCode.charCodeAt(0) - 64;
           nextCityIndex[city] = Math.max(nextCityIndex[city], nextIdx);
         }
       }
     }
 
-    // Load sequence numbers from Google Sheet
-    const seqData = await getSheetData(SHEET_ID, '序號記錄!A:B');
+    // 序號從現有物件總表計算，不從「序號記錄」分頁讀取
     sequenceMap = {};
-
-    // Parse sequences
-    // Expected format: SeqKey | LastNumber
-    for (let i = 1; i < seqData.length; i++) {
-      const row = seqData[i];
-      if (row.length >= 2) {
-        const seqKey = row[0]?.toString().trim();
-        const lastNum = parseInt(row[1]?.toString() || '0');
-        if (seqKey) {
-          sequenceMap[seqKey] = lastNum;
-        }
-      }
+    if (existingSeqMap) {
+      existingSeqMap.forEach((seq, key) => {
+        sequenceMap[key] = seq;
+      });
     }
   } catch (error) {
     console.error('Failed to initialize code generator:', error);
