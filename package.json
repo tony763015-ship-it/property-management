@@ -1,0 +1,27 @@
+{
+  "name": "property-management",
+  "version": "1.0.0",
+  "description": "房屋租賃物件管理系統",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@tailwindcss/postcss": "^4.2.2",
+    "@types/node": "^25.5.0",
+    "@types/react": "^19.2.14",
+    "autoprefixer": "^10.4.27",
+    "dotenv": "^17.3.1",
+    "google-auth-library": "^10.6.2",
+    "googleapis": "^171.4.0",
+    "next": "^16.2.1",
+    "postcss": "^8.5.8",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "tailwindcss": "^4.2.2",
+    "typescript": "^6.0.2",
+    "xlsx": "^0.18.5"
+  }
+}
