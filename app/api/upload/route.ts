@@ -58,18 +58,38 @@ export async function POST(request: NextRequest) {
       console.log('無既存物件資料')
     }
 
+    // 定義欄位順序（根據用戶需求）
+    const columnOrder = [
+      '編號',
+      '狀態',
+      '案名',
+      '鄉鎮市區',
+      '地址',
+      '格局',
+      '月租金',
+      '車位月租金',
+      '房屋管理費',
+      '物件型態',
+      '所在樓層',
+      '總樓層',
+      '登記坪數',
+      '主建坪數',
+      '附屬建物坪',
+      '公設坪數',
+      '車位坪數',
+      '開伙',
+      '寵物',
+      '屋齡',
+      '進屋方式',
+      '委託時間(迄)',
+    ]
+
     // Process properties
     const newRows = []
     let newCount = 0
     let duplicateCount = 0
     let errorCount = 0
     const errors: string[] = []
-
-    // 收集所有可能的欄位名稱
-    const allFieldNames = new Set<string>()
-    properties.forEach(prop => {
-      Object.keys(prop).forEach(key => allFieldNames.add(key))
-    })
 
     for (let i = 0; i < properties.length; i++) {
       try {
@@ -85,10 +105,17 @@ export async function POST(request: NextRequest) {
         // Generate code
         const code = await generateCode(prop.city, prop.district, prop.roomType)
 
-        // 建立新列，包含所有欄位
-        const newRow: any = { 編碼: code, 狀態: '在租' }
-        allFieldNames.forEach(field => {
-          newRow[field] = prop[field] || ''
+        // 按照欄位順序建立新列
+        const newRow: any = {}
+        columnOrder.forEach(field => {
+          if (field === '編號') {
+            newRow[field] = code
+          } else if (field === '狀態') {
+            newRow[field] = '在租'
+          } else {
+            // 從 properties 中找對應的值
+            newRow[field] = prop[field] || prop[field.toLowerCase()] || ''
+          }
         })
 
         newRows.push(newRow)
@@ -101,16 +128,13 @@ export async function POST(request: NextRequest) {
 
     // Append to Google Sheet
     if (newRows.length > 0) {
-      // 建立標題列（包含編碼、狀態 + 所有原始欄位）
-      const headerRow = ['編碼', '狀態', ...Array.from(allFieldNames).sort()]
-
-      // 建立資料列
+      // 按照定義的順序建立資料列
       const dataRows = newRows.map(row =>
-        [row.編碼, row.狀態, ...Array.from(allFieldNames).sort().map(field => row[field] || '')]
+        columnOrder.map(field => row[field] || '')
       )
 
       await appendSheetData(SHEET_ID, '物件總表!A1', [
-        headerRow,
+        columnOrder,
         ...dataRows,
       ])
     }
