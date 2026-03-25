@@ -1,11 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 export default function LiffFormPage() {
   const [step, setStep] = useState(1)
   const [submitted, setSubmitted] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [lineUserId, setLineUserId] = useState('')
   const [form, setForm] = useState({
     name: '', phone: '', gender: '',
     residents: '', relationship: '', age: '', occupation: '', company: '',
@@ -17,12 +18,34 @@ export default function LiffFormPage() {
 
   const set = (key: string, val: string) => setForm(f => ({ ...f, [key]: val }))
 
+  useEffect(() => {
+    // 初始化 LIFF 取得用戶 ID
+    const initLiff = async () => {
+      try {
+        const liff = (await import('@line/liff')).default
+        await liff.init({ liffId: '2009603225-fx2PTwfJ' })
+        if (liff.isLoggedIn()) {
+          const profile = await liff.getProfile()
+          setLineUserId(profile.userId)
+        } else {
+          liff.login()
+        }
+      } catch (e) {
+        console.log('LIFF init error:', e)
+      }
+    }
+    initLiff()
+  }, [])
+
   const handleSubmit = async () => {
     setLoading(true)
     try {
       const res = await fetch('/api/line/submit-form', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-line-user-id': lineUserId,
+        },
         body: JSON.stringify(form),
       })
       if (res.ok) setSubmitted(true)
