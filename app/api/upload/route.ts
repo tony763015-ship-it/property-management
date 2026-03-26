@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { parseRagicExcel } from '../../../lib/excel-parser'
 import { generateCode, initializeCodeGenerator } from '../../../lib/code-generator'
-import { getSheetData, appendSheetData, ensureSheetExists, clearSheet, updateSheetData, batchUpdateSheetData } from '../../../lib/google-sheets'
+import { getSheetData, appendSheetData, ensureSheetExists, clearSheet, updateSheetData, batchUpdateSheetData, batchHideUnhideRows } from '../../../lib/google-sheets'
 
 const SHEET_ID = process.env.NEXT_PUBLIC_SHEET_ID || ''
 
@@ -117,6 +117,8 @@ export async function POST(request: NextRequest) {
     const errors: string[] = []
     const rowsToUpdate: Array<{ rowIndex: number; data: string[] | null }> = []
     const rowsToAdd: string[][] = []
+    const hideRowIndices: number[] = []
+    const unhideRowIndices: number[] = []
 
     // 處理新 Excel 中的每筆資料
     for (let i = 0; i < ragicData.length; i++) {
@@ -152,7 +154,9 @@ export async function POST(request: NextRequest) {
         })
 
         if (isExisting) {
-          rowsToUpdate.push({ rowIndex: existingCodeMap.get(address)!.rowIndex, data: rowData })
+          const rowIndex = existingCodeMap.get(address)!.rowIndex
+          rowsToUpdate.push({ rowIndex, data: rowData })
+          unhideRowIndices.push(rowIndex) // 取消隱藏（可能之前被下架隱藏過）
         } else {
           rowsToAdd.push(rowData)
         }
@@ -162,10 +166,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 不在新 Excel 中的舊物件 → 自動標記下架
+    // 不在新 Excel 中的舊物件 → 自動標記下架並隱藏列
     for (const [address, existing] of existingCodeMap.entries()) {
       if (!newAddresses.has(address)) {
         rowsToUpdate.push({ rowIndex: existing.rowIndex, data: null })
+        hideRowIndices.push(existing.rowIndex)
         hideCount++
       }
     }
@@ -185,6 +190,14 @@ export async function POST(request: NextRequest) {
     if (rowsToAdd.length > 0) {
       await appendSheetData(SHEET_ID, '物件總表!A1', rowsToAdd)
     }
+
+    // 隱藏下架列 / 取消隱藏重新出現的列
+    const sheetTabId = await ensureSheetExists(SHEET_ID, '物件總表')
+    const hideOps = [
+      ...hideRowIndices.map(r => ({ rowIndex: r, hide: true })),
+      ...unhideRowIndices.map(r => ({ rowIndex: r, hide: false })),
+    ]
+    await batchHideUnhideRows(SHEET_ID, sheetTabId, hideOps)
 
     return NextResponse.json({
       processedCount: ragicData.length,

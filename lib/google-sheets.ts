@@ -98,6 +98,31 @@ export async function clearSheet(spreadsheetId: string, range: string) {
   });
 }
 
+export async function batchHideUnhideRows(
+  spreadsheetId: string,
+  sheetId: number,
+  operations: { rowIndex: number; hide: boolean }[]
+) {
+  if (operations.length === 0) return
+  const sheets = await initGoogleSheets()
+  const requests = operations.map(({ rowIndex, hide }) => ({
+    updateDimensionProperties: {
+      range: {
+        sheetId,
+        dimension: 'ROWS',
+        startIndex: rowIndex - 1, // 0-based
+        endIndex: rowIndex,
+      },
+      properties: { hiddenByUser: hide },
+      fields: 'hiddenByUser',
+    },
+  }))
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: { requests },
+  })
+}
+
 export async function ensureSheetExists(spreadsheetId: string, sheetName: string) {
   const sheets = await initGoogleSheets();
   try {
