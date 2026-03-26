@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
     let hideCount = 0
     let errorCount = 0
     const errors: string[] = []
-    const rowsToUpdate: Array<{ rowIndex: number; data: string[] }> = []
+    const rowsToUpdate: Array<{ rowIndex: number; data: string[] | null }> = []
     const rowsToAdd: string[][] = []
 
     // 處理新 Excel 中的每筆資料
@@ -162,10 +162,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 不在新 Excel 中的舊物件 → 自動隱藏（狀態改為已出租）
+    // 不在新 Excel 中的舊物件 → 自動標記下架
     for (const [address, existing] of existingCodeMap.entries()) {
       if (!newAddresses.has(address)) {
-        rowsToUpdate.push({ rowIndex: existing.rowIndex, data: null as any })
+        rowsToUpdate.push({ rowIndex: existing.rowIndex, data: null })
         hideCount++
       }
     }
@@ -174,7 +174,7 @@ export async function POST(request: NextRequest) {
     const endCol = String.fromCharCode(64 + REQUIRED_COLUMNS.length)
     const batchUpdates = rowsToUpdate.map(update => {
       if (update.data === null) {
-        return { range: `物件總表!B${update.rowIndex}`, values: [['已出租']] }
+        return { range: `物件總表!B${update.rowIndex}`, values: [['下架']] }
       } else {
         return { range: `物件總表!A${update.rowIndex}:${endCol}${update.rowIndex}`, values: [update.data] }
       }
