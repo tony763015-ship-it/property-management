@@ -2,14 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { parseRagicExcel } from '../../../lib/excel-parser'
 import { generateCode, initializeCodeGenerator } from '../../../lib/code-generator'
 import { getSheetData, appendSheetData, ensureSheetExists, clearSheet, batchUpdateSheetData } from '../../../lib/google-sheets'
+import { ensureDriveFolder, ensurePropertyDoc } from '../../../lib/google-drive'
 
 const SHEET_ID = process.env.NEXT_PUBLIC_SHEET_ID || ''
+const DRIVE_FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID || ''
 
 const REQUIRED_COLUMNS = [
   '編號', '狀態', '案名', '鄉鎮市區', '地址', '格局', '月租金',
   '車位月租金', '房屋管理費', '物件型態', '所在樓層', '總樓層', '登記坪數',
   '主建坪數', '附屬建物坪', '公設坪數', '車位坪數', '開伙', '寵物', '屋齡',
-  '進屋方式', '委託時間(迄)',
+  '進屋方式', '委託時間(迄)', '資料夾ID',
 ]
 
 export async function POST(request: NextRequest) {
@@ -37,16 +39,19 @@ export async function POST(request: NextRequest) {
     await ensureSheetExists(SHEET_ID, '序號記錄')
 
     // 讀取現有在架物件（物件總表）
-    const codeMap = new Map<string, string>() // address → code
+    const codeMap = new Map<string, string>()     // address → code
+    const folderIdMap = new Map<string, string>() // address → Drive 資料夾ID
     const existingSeqMap = new Map<string, number>()
 
     try {
       const activeData = await getSheetData(SHEET_ID, '物件總表!A:Z')
+      const folderColIdx = REQUIRED_COLUMNS.indexOf('資料夾ID')
       for (let i = 1; i < activeData.length; i++) {
         const code = (activeData[i][0] || '').toString().trim()
         const address = (activeData[i][4] || '').toString().toLowerCase().trim()
         if (address && code && code !== '編號') {
           codeMap.set(address, code)
+          if (folderColIdx >= 0) folderIdMap.set(address, (activeData[i][folderColIdx] || '').toString().trim())
           const seqKey = code.slice(0, 3)
           const seq = parseInt(code.slice(3)) || 0
           if (!existingSeqMap.has(seqKey) || existingSeqMap.get(seqKey)! < seq) {
@@ -59,11 +64,13 @@ export async function POST(request: NextRequest) {
     // 讀取現有下架物件（下架物件分頁）
     try {
       const inactiveData = await getSheetData(SHEET_ID, '下架物件!A:Z')
+      const folderColIdx = REQUIRED_COLUMNS.indexOf('資料夾ID')
       for (let i = 1; i < inactiveData.length; i++) {
         const code = (inactiveData[i][0] || '').toString().trim()
         const address = (inactiveData[i][4] || '').toString().toLowerCase().trim()
         if (address && code && code !== '編號') {
-          codeMap.set(address, code) // 保留下架物件的編號
+          codeMap.set(address, code)
+          if (folderColIdx >= 0) folderIdMap.set(address, (inactiveData[i][folderColIdx] || '').toString().trim())
           const seqKey = code.slice(0, 3)
           const seq = parseInt(code.slice(3)) || 0
           if (!existingSeqMap.has(seqKey) || existingSeqMap.get(seqKey)! < seq) {
@@ -98,6 +105,7 @@ export async function POST(request: NextRequest) {
         const ragicStatus = (prop['狀態'] || '').toString().trim()
 
         let code: string
+        let folderId = folderIdMap.get(address) || ''
         if (codeMap.has(address)) {
           code = codeMap.get(address)!
           updateCount++
@@ -106,10 +114,23 @@ export async function POST(request: NextRequest) {
           newCount++
         }
 
+        // 建立 Drive 資料夾（僅在沒有資料夾ID時）
+        if (DRIVE_FOLDER_ID && !folderId) {
+          try {
+            const caseName = (prop['案名'] || '').toString().trim()
+            const folderName = `${code} ${caseName}`.trim()
+            folderId = await ensureDriveFolder(DRIVE_FOLDER_ID, folderName)
+            await ensurePropertyDoc(folderId, '物件介紹')
+          } catch (e) {
+            console.error('Drive folder creation failed:', e)
+          }
+        }
+
         const status = ragicStatus || '代租中'
         const rowData = REQUIRED_COLUMNS.map(field => {
           if (field === '編號') return code
           if (field === '狀態') return status
+          if (field === '資料夾ID') return folderId
           const val = prop[field]
           return val !== null && val !== undefined ? String(val) : ''
         })
