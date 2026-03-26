@@ -1,19 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getDriveImageStream } from '../../../../../lib/google-drive'
+import { getDriveImageBuffer } from '../../../../../lib/google-drive'
 
 export async function GET(request: NextRequest, { params }: { params: { fileId: string } }) {
   try {
-    const stream = await getDriveImageStream(params.fileId)
-    const chunks: Buffer[] = []
-    await new Promise<void>((resolve, reject) => {
-      stream.on('data', (chunk: Buffer) => chunks.push(chunk))
-      stream.on('end', resolve)
-      stream.on('error', reject)
-    })
-    const buffer = Buffer.concat(chunks)
+    const { buffer, mimeType } = await getDriveImageBuffer(params.fileId)
     return new NextResponse(buffer, {
       headers: {
-        'Content-Type': 'image/jpeg',
+        'Content-Type': mimeType,
         'Cache-Control': 'public, max-age=3600',
       },
     })

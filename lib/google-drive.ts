@@ -111,9 +111,14 @@ export async function getDocText(folderId: string): Promise<string> {
   return (exported.data as string).trim()
 }
 
-// 取得圖片串流（用於代理給 LIFF 顯示）
-export async function getDriveImageStream(fileId: string) {
+// 取得圖片資料（用於代理給 LIFF 顯示）
+export async function getDriveImageBuffer(fileId: string): Promise<{ buffer: Buffer; mimeType: string }> {
   const drive = await initDrive()
-  const res = await drive.files.get({ fileId, alt: 'media' }, { responseType: 'stream' })
-  return res.data
+  // 先取得 MIME type
+  const meta = await drive.files.get({ fileId, fields: 'mimeType' })
+  const mimeType = meta.data.mimeType || 'image/jpeg'
+  // 下載內容
+  const res = await drive.files.get({ fileId, alt: 'media' }, { responseType: 'arraybuffer' })
+  const buffer = Buffer.from(res.data as ArrayBuffer)
+  return { buffer, mimeType }
 }
