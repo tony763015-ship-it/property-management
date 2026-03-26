@@ -2,10 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { parseRagicExcel } from '../../../lib/excel-parser'
 import { generateCode, initializeCodeGenerator } from '../../../lib/code-generator'
 import { getSheetData, appendSheetData, ensureSheetExists, clearSheet, batchUpdateSheetData } from '../../../lib/google-sheets'
-import { ensureDriveFolder, ensurePropertyDoc } from '../../../lib/google-drive'
-
 const SHEET_ID = process.env.NEXT_PUBLIC_SHEET_ID || ''
-const DRIVE_FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID || ''
+const APPS_SCRIPT_URL = process.env.APPS_SCRIPT_URL || ''
 
 const REQUIRED_COLUMNS = [
   '編號', '狀態', '案名', '鄉鎮市區', '地址', '格局', '月租金',
@@ -114,18 +112,6 @@ export async function POST(request: NextRequest) {
           newCount++
         }
 
-        // 建立 Drive 資料夾（僅在沒有資料夾ID時）
-        if (DRIVE_FOLDER_ID && !folderId) {
-          try {
-            const caseName = (prop['案名'] || '').toString().trim()
-            const folderName = `${code} ${caseName}`.trim()
-            folderId = await ensureDriveFolder(DRIVE_FOLDER_ID, folderName)
-            await ensurePropertyDoc(folderId, '物件介紹')
-          } catch (e) {
-            console.error('Drive folder creation failed:', e)
-          }
-        }
-
         const status = ragicStatus || '代租中'
         const rowData = REQUIRED_COLUMNS.map(field => {
           if (field === '編號') return code
@@ -186,6 +172,11 @@ export async function POST(request: NextRequest) {
 
     await clearSheet(SHEET_ID, '下架物件!A:Z')
     await appendSheetData(SHEET_ID, '下架物件!A1', [INACTIVE_COLUMNS, ...inactiveRows])
+
+    // 呼叫 Apps Script 建立新物件的 Drive 資料夾（背景執行，不等待）
+    if (APPS_SCRIPT_URL && newCount > 0) {
+      fetch(APPS_SCRIPT_URL).catch(() => {})
+    }
 
     return NextResponse.json({
       processedCount: ragicData.length,
