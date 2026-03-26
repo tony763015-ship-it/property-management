@@ -23,6 +23,21 @@ async function initDrive() {
   return driveAPI
 }
 
+const OWNER_EMAIL = process.env.GOOGLE_OWNER_EMAIL || ''
+
+async function transferOwnership(fileId: string) {
+  if (!OWNER_EMAIL) return
+  const drive = await initDrive()
+  try {
+    await drive.permissions.create({
+      fileId,
+      requestBody: { role: 'owner', type: 'user', emailAddress: OWNER_EMAIL },
+      transferOwnership: true,
+      sendNotificationEmail: false,
+    })
+  } catch { /* 轉移失敗不中斷流程 */ }
+}
+
 // 建立或取得資料夾（只建不刪）
 export async function ensureDriveFolder(parentId: string, folderName: string): Promise<string> {
   const drive = await initDrive()
@@ -40,6 +55,7 @@ export async function ensureDriveFolder(parentId: string, folderName: string): P
     },
     fields: 'id',
   })
+  await transferOwnership(folder.data.id)
   return folder.data.id
 }
 
@@ -60,6 +76,7 @@ export async function ensurePropertyDoc(folderId: string, docName: string): Prom
     },
     fields: 'id',
   })
+  await transferOwnership(doc.data.id)
   return doc.data.id
 }
 
