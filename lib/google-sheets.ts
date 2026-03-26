@@ -75,6 +75,21 @@ export async function updateSheetData(
   });
 }
 
+export async function batchUpdateSheetData(
+  spreadsheetId: string,
+  updates: { range: string; values: any[][] }[]
+) {
+  if (updates.length === 0) return
+  const sheets = await initGoogleSheets()
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      valueInputOption: 'USER_ENTERED',
+      data: updates.map(u => ({ range: u.range, values: u.values })),
+    },
+  })
+}
+
 export async function clearSheet(spreadsheetId: string, range: string) {
   const sheets = await initGoogleSheets();
   await sheets.spreadsheets.values.clear({

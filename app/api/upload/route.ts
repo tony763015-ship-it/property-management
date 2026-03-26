@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { parseRagicExcel } from '../../../lib/excel-parser'
 import { generateCode, initializeCodeGenerator } from '../../../lib/code-generator'
-import { getSheetData, appendSheetData, ensureSheetExists, clearSheet, updateSheetData } from '../../../lib/google-sheets'
+import { getSheetData, appendSheetData, ensureSheetExists, clearSheet, updateSheetData, batchUpdateSheetData } from '../../../lib/google-sheets'
 
 const SHEET_ID = process.env.NEXT_PUBLIC_SHEET_ID || ''
 
@@ -170,20 +170,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 更新現有列
-    for (const update of rowsToUpdate) {
+    // 批次更新現有列（一次 API 呼叫）
+    const endCol = String.fromCharCode(64 + REQUIRED_COLUMNS.length)
+    const batchUpdates = rowsToUpdate.map(update => {
       if (update.data === null) {
-        // 只更新狀態欄為「已出租」
-        await updateSheetData(SHEET_ID, `物件總表!B${update.rowIndex}`, [['已出租']])
+        return { range: `物件總表!B${update.rowIndex}`, values: [['已出租']] }
       } else {
-        const endCol = String.fromCharCode(64 + REQUIRED_COLUMNS.length)
-        await updateSheetData(
-          SHEET_ID,
-          `物件總表!A${update.rowIndex}:${endCol}${update.rowIndex}`,
-          [update.data]
-        )
+        return { range: `物件總表!A${update.rowIndex}:${endCol}${update.rowIndex}`, values: [update.data] }
       }
-    }
+    })
+    await batchUpdateSheetData(SHEET_ID, batchUpdates)
 
     // 新增新列
     if (rowsToAdd.length > 0) {
