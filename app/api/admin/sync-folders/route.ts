@@ -39,6 +39,7 @@ export async function GET(request: NextRequest) {
     const updates: { range: string; values: any[][] }[] = []
     let created = 0
     let failed = 0
+    let firstError = ''
 
     for (let i = 0; i < needsFolders.length; i += BATCH) {
       const batch = needsFolders.slice(i, i + BATCH)
@@ -55,8 +56,8 @@ export async function GET(request: NextRequest) {
             values: [[folderId]],
           })
           created++
-        } catch (e) {
-          console.error('Folder creation failed:', e)
+        } catch (e: any) {
+          if (!firstError) firstError = e?.message || String(e)
           failed++
         }
       }))
@@ -72,6 +73,7 @@ export async function GET(request: NextRequest) {
       created,
       failed,
       total: needsFolders.length,
+      firstError,
     })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
