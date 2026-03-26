@@ -73,6 +73,62 @@ export function createWelcomeMessage(liffFormUrl: string): line.FlexMessage {
   }
 }
 
+// 物件編號查詢回覆
+export function createPropertyDetailMessage(property: Record<string, string>, detailUrl: string): line.FlexMessage {
+  return {
+    type: 'flex',
+    altText: `📍 ${property['編號']} ${property['案名'] || property['鄉鎮市區']}`,
+    contents: {
+      type: 'bubble',
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        contents: [
+          { type: 'text', text: property['編號'], size: 'sm', color: '#667eea', weight: 'bold' },
+          { type: 'text', text: property['案名'] || property['鄉鎮市區'], weight: 'bold', size: 'lg', wrap: true, margin: 'sm' },
+          { type: 'separator', margin: 'md' },
+          {
+            type: 'box', layout: 'vertical', margin: 'md', spacing: 'sm',
+            contents: [
+              { type: 'box', layout: 'horizontal', contents: [
+                { type: 'text', text: '地區', size: 'sm', color: '#9ca3af', flex: 2 },
+                { type: 'text', text: property['鄉鎮市區'] || '-', size: 'sm', flex: 5, wrap: true },
+              ]},
+              { type: 'box', layout: 'horizontal', contents: [
+                { type: 'text', text: '格局', size: 'sm', color: '#9ca3af', flex: 2 },
+                { type: 'text', text: property['格局'] || '-', size: 'sm', flex: 5, wrap: true },
+              ]},
+              { type: 'box', layout: 'horizontal', contents: [
+                { type: 'text', text: '坪數', size: 'sm', color: '#9ca3af', flex: 2 },
+                { type: 'text', text: property['登記坪數'] ? `${property['登記坪數']} 坪` : '-', size: 'sm', flex: 5 },
+              ]},
+              { type: 'box', layout: 'horizontal', contents: [
+                { type: 'text', text: '樓層', size: 'sm', color: '#9ca3af', flex: 2 },
+                { type: 'text', text: property['所在樓層'] && property['總樓層'] ? `${property['所在樓層']}/${property['總樓層']}樓` : '-', size: 'sm', flex: 5 },
+              ]},
+              { type: 'box', layout: 'horizontal', contents: [
+                { type: 'text', text: '月租金', size: 'sm', color: '#9ca3af', flex: 2 },
+                { type: 'text', text: property['月租金'] ? `NT$ ${Number(property['月租金']).toLocaleString()}` : '-', size: 'sm', color: '#667eea', weight: 'bold', flex: 5 },
+              ]},
+              { type: 'box', layout: 'horizontal', contents: [
+                { type: 'text', text: '寵物', size: 'sm', color: '#9ca3af', flex: 2 },
+                { type: 'text', text: property['寵物'] || '-', size: 'sm', flex: 5 },
+              ]},
+            ],
+          },
+        ],
+      },
+      footer: {
+        type: 'box', layout: 'vertical',
+        contents: [{
+          type: 'button', style: 'primary', color: '#667eea',
+          action: { type: 'uri', label: '📸 查看詳細資訊與照片', uri: detailUrl },
+        }],
+      },
+    },
+  }
+}
+
 // 配對結果文字訊息
 export function createMatchResultMessage(properties: any[]): line.TextMessage {
   if (properties.length === 0) {
