@@ -118,6 +118,15 @@ export async function batchHideUnhideRows(
     },
   })
 
+  // 永遠確保第一列（標題列）可見
+  requests.push({
+    updateDimensionProperties: {
+      range: { sheetId, dimension: 'ROWS', startIndex: 0, endIndex: 1 },
+      properties: { hiddenByUser: false },
+      fields: 'hiddenByUser',
+    },
+  })
+
   // 隱藏/取消隱藏列（永遠不動第一列）
   for (const { rowIndex, hide } of operations) {
     if (rowIndex <= 1) continue // 保護標題列
