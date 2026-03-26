@@ -105,18 +105,36 @@ export async function batchHideUnhideRows(
 ) {
   if (operations.length === 0) return
   const sheets = await initGoogleSheets()
-  const requests = operations.map(({ rowIndex, hide }) => ({
-    updateDimensionProperties: {
-      range: {
+  const requests: any[] = []
+
+  // 凍結第一列（標題列）
+  requests.push({
+    updateSheetProperties: {
+      properties: {
         sheetId,
-        dimension: 'ROWS',
-        startIndex: rowIndex - 1, // 0-based
-        endIndex: rowIndex,
+        gridProperties: { frozenRowCount: 1 },
       },
-      properties: { hiddenByUser: hide },
-      fields: 'hiddenByUser',
+      fields: 'gridProperties.frozenRowCount',
     },
-  }))
+  })
+
+  // 隱藏/取消隱藏列（永遠不動第一列）
+  for (const { rowIndex, hide } of operations) {
+    if (rowIndex <= 1) continue // 保護標題列
+    requests.push({
+      updateDimensionProperties: {
+        range: {
+          sheetId,
+          dimension: 'ROWS',
+          startIndex: rowIndex - 1, // 0-based
+          endIndex: rowIndex,
+        },
+        properties: { hiddenByUser: hide },
+        fields: 'hiddenByUser',
+      },
+    })
+  }
+
   await sheets.spreadsheets.batchUpdate({
     spreadsheetId,
     requestBody: { requests },
