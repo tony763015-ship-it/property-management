@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDriveImageBuffer } from '../../../../../lib/google-drive'
 
-export async function GET(request: NextRequest, { params }: { params: { fileId: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ fileId: string }> }) {
   try {
-    const { buffer, mimeType } = await getDriveImageBuffer(params.fileId)
+    const { fileId } = await params
+    const { buffer, mimeType } = await getDriveImageBuffer(fileId)
     return new NextResponse(buffer, {
       headers: {
         'Content-Type': mimeType,

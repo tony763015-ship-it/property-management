@@ -4,9 +4,9 @@ import { getFolderImages, getDocText } from '../../../../lib/google-drive'
 
 const SHEET_ID = process.env.NEXT_PUBLIC_SHEET_ID || ''
 
-export async function GET(request: NextRequest, { params }: { params: { code: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ code: string }> }) {
   try {
-    const code = params.code
+    const { code } = await params
 
     // 從物件總表找這個編號
     const allData = await getSheetData(SHEET_ID, '物件總表!A:Z')
