@@ -1,218 +1,179 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { parseRagicExcel } from '../../../lib/excel-parser'
 import { generateCode, initializeCodeGenerator } from '../../../lib/code-generator'
-import { getSheetData, appendSheetData, ensureSheetExists, clearSheet, updateSheetData, batchUpdateSheetData, batchHideUnhideRows } from '../../../lib/google-sheets'
+import { getSheetData, appendSheetData, ensureSheetExists, clearSheet, batchUpdateSheetData } from '../../../lib/google-sheets'
 
 const SHEET_ID = process.env.NEXT_PUBLIC_SHEET_ID || ''
 
-// 用戶指定的欄位（只有這 23 個）
 const REQUIRED_COLUMNS = [
-  '編號',
-  '狀態',
-  '案名',
-  '鄉鎮市區',
-  '地址',
-  '格局',
-  '月租金',
-  '車位月租金',
-  '房屋管理費',
-  '物件型態',
-  '所在樓層',
-  '總樓層',
-  '登記坪數',
-  '主建坪數',
-  '附屬建物坪',
-  '公設坪數',
-  '車位坪數',
-  '開伙',
-  '寵物',
-  '屋齡',
-  '進屋方式',
-  '委託時間(迄)',
+  '編號', '狀態', '案名', '鄉鎮市區', '地址', '格局', '月租金',
+  '車位月租金', '房屋管理費', '物件型態', '所在樓層', '總樓層', '登記坪數',
+  '主建坪數', '附屬建物坪', '公設坪數', '車位坪數', '開伙', '寵物', '屋齡',
+  '進屋方式', '委託時間(迄)',
 ]
 
 export async function POST(request: NextRequest) {
   try {
     if (!SHEET_ID) {
-      return NextResponse.json(
-        { error: '未設定 Google Sheet ID' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: '未設定 Google Sheet ID' }, { status: 400 })
     }
 
-    // Parse form data
     const formData = await request.formData()
     const file = formData.get('file') as File
-
     if (!file) {
-      return NextResponse.json(
-        { error: '未找到檔案' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: '未找到檔案' }, { status: 400 })
     }
 
-    // Read file buffer
     const buffer = Buffer.from(await file.arrayBuffer())
-
-    // Parse Excel
     const ragicData = await parseRagicExcel(buffer)
-
     if (ragicData.length === 0) {
-      return NextResponse.json(
-        { error: '無法解析檔案或檔案為空' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: '無法解析檔案或檔案為空' }, { status: 400 })
     }
 
-    // Ensure all required sheets exist
+    // 確保分頁存在
     await ensureSheetExists(SHEET_ID, '物件總表')
+    await ensureSheetExists(SHEET_ID, '下架物件')
     await ensureSheetExists(SHEET_ID, '地區編碼對照')
     await ensureSheetExists(SHEET_ID, '序號記錄')
 
-    // 讀取現有所有物件（包含隱藏的）→ 地址永久綁定編號
-    interface ExistingRow { code: string; rowIndex: number }
-    const existingCodeMap = new Map<string, ExistingRow>() // address -> { code, rowIndex }
-    const existingSeqMap = new Map<string, number>()       // seqKey -> 最大序號
-    let hasHeader = false
+    // 讀取現有在架物件（物件總表）
+    const codeMap = new Map<string, string>() // address → code
+    const existingSeqMap = new Map<string, number>()
 
     try {
-      const existingData = await getSheetData(SHEET_ID, '物件總表!A:Z')
-      if (existingData.length > 0) {
-        hasHeader = true
-        for (let i = 1; i < existingData.length; i++) {
-          const code = (existingData[i][0] || '').toString().trim()
-          const address = (existingData[i][4] || '').toString().toLowerCase().trim()
-          if (address && code) {
-            existingCodeMap.set(address, { code, rowIndex: i + 1 })
-            const seqKey = code.slice(0, 3)
-            const seq = parseInt(code.slice(3)) || 0
-            if (!existingSeqMap.has(seqKey) || existingSeqMap.get(seqKey)! < seq) {
-              existingSeqMap.set(seqKey, seq)
-            }
+      const activeData = await getSheetData(SHEET_ID, '物件總表!A:Z')
+      for (let i = 1; i < activeData.length; i++) {
+        const code = (activeData[i][0] || '').toString().trim()
+        const address = (activeData[i][4] || '').toString().toLowerCase().trim()
+        if (address && code && code !== '編號') {
+          codeMap.set(address, code)
+          const seqKey = code.slice(0, 3)
+          const seq = parseInt(code.slice(3)) || 0
+          if (!existingSeqMap.has(seqKey) || existingSeqMap.get(seqKey)! < seq) {
+            existingSeqMap.set(seqKey, seq)
           }
         }
       }
-    } catch (error: any) {
-      console.log('無既存物件資料')
-    }
+    } catch { console.log('無在架物件資料') }
+
+    // 讀取現有下架物件（下架物件分頁）
+    try {
+      const inactiveData = await getSheetData(SHEET_ID, '下架物件!A:Z')
+      for (let i = 1; i < inactiveData.length; i++) {
+        const code = (inactiveData[i][0] || '').toString().trim()
+        const address = (inactiveData[i][4] || '').toString().toLowerCase().trim()
+        if (address && code && code !== '編號') {
+          codeMap.set(address, code) // 保留下架物件的編號
+          const seqKey = code.slice(0, 3)
+          const seq = parseInt(code.slice(3)) || 0
+          if (!existingSeqMap.has(seqKey) || existingSeqMap.get(seqKey)! < seq) {
+            existingSeqMap.set(seqKey, seq)
+          }
+        }
+      }
+    } catch { console.log('無下架物件資料') }
 
     await initializeCodeGenerator(existingSeqMap)
 
-    // 如果是第一次（無標題列），先寫入標題
-    if (!hasHeader) {
-      await appendSheetData(SHEET_ID, '物件總表!A1', [REQUIRED_COLUMNS])
-    }
-
-    // 新 Excel 中的地址集合
-    const newAddresses = new Set<string>()
-    for (const prop of ragicData) {
-      const address = (prop['地址'] || '').toString().toLowerCase().trim()
-      if (address) newAddresses.add(address)
-    }
-
+    // 處理新 Excel → 建立最終在架清單
     let newCount = 0
     let updateCount = 0
-    let hideCount = 0
+    let offlineCount = 0
+    let restoreCount = 0
     let errorCount = 0
     const errors: string[] = []
-    const rowsToUpdate: Array<{ rowIndex: number; data: string[] | null }> = []
-    const rowsToAdd: string[][] = []
-    const hideRowIndices: number[] = []
-    const unhideRowIndices: number[] = []
+    const activeRows: string[][] = []
+    const newAddresses = new Set<string>()
 
-    // 處理新 Excel 中的每筆資料
     for (let i = 0; i < ragicData.length; i++) {
       try {
         const prop = ragicData[i]
         const address = (prop['地址'] || '').toString().toLowerCase().trim()
         if (!address) continue
+        newAddresses.add(address)
 
         const city = (prop['縣市'] || '').toString().trim()
         const district = (prop['鄉鎮市區'] || '').toString().trim()
         const roomType = (prop['格局'] || '').toString().trim()
         const ragicStatus = (prop['狀態'] || '').toString().trim()
 
-        // 地址已存在 → 用舊編號；否則生成新編號
         let code: string
-        const isExisting = existingCodeMap.has(address)
-        if (isExisting) {
-          code = existingCodeMap.get(address)!.code
+        if (codeMap.has(address)) {
+          code = codeMap.get(address)!
           updateCount++
         } else {
           code = await generateCode(city, district, roomType)
           newCount++
         }
 
-        // 直接保留 Ragic 原始狀態
-        const status = ragicStatus || '在租'
-
+        const status = ragicStatus || '代租中'
         const rowData = REQUIRED_COLUMNS.map(field => {
           if (field === '編號') return code
           if (field === '狀態') return status
           const val = prop[field]
           return val !== null && val !== undefined ? String(val) : ''
         })
-
-        if (isExisting) {
-          const rowIndex = existingCodeMap.get(address)!.rowIndex
-          rowsToUpdate.push({ rowIndex, data: rowData })
-          unhideRowIndices.push(rowIndex) // 取消隱藏（可能之前被下架隱藏過）
-        } else {
-          rowsToAdd.push(rowData)
-        }
+        activeRows.push(rowData)
       } catch (err: any) {
         errorCount++
         errors.push(`第 ${i + 1} 筆：${err.message}`)
       }
     }
 
-    // 不在新 Excel 中的舊物件 → 自動標記下架並隱藏列
-    for (const [address, existing] of existingCodeMap.entries()) {
-      if (!newAddresses.has(address)) {
-        rowsToUpdate.push({ rowIndex: existing.rowIndex, data: null })
-        hideRowIndices.push(existing.rowIndex)
-        hideCount++
+    // 找出需要移到下架分頁的物件（原本在架但新 Excel 沒有）
+    const inactiveRows: string[][] = []
+    try {
+      const activeData = await getSheetData(SHEET_ID, '物件總表!A:Z')
+      for (let i = 1; i < activeData.length; i++) {
+        const address = (activeData[i][4] || '').toString().toLowerCase().trim()
+        if (!address || address === '地址') continue
+        if (!newAddresses.has(address)) {
+          // 移到下架分頁，狀態改為下架
+          const row = [...activeData[i]]
+          row[1] = '下架'
+          inactiveRows.push(row)
+          offlineCount++
+        }
       }
-    }
+    } catch { }
 
-    // 批次更新現有列（一次 API 呼叫）
-    const endCol = String.fromCharCode(64 + REQUIRED_COLUMNS.length)
-    const batchUpdates = rowsToUpdate.map(update => {
-      if (update.data === null) {
-        return { range: `物件總表!B${update.rowIndex}`, values: [['下架']] }
-      } else {
-        return { range: `物件總表!A${update.rowIndex}:${endCol}${update.rowIndex}`, values: [update.data] }
+    // 保留原下架分頁中「新 Excel 沒有的」物件（已下架且未恢復）
+    try {
+      const prevInactive = await getSheetData(SHEET_ID, '下架物件!A:Z')
+      for (let i = 1; i < prevInactive.length; i++) {
+        const address = (prevInactive[i][4] || '').toString().toLowerCase().trim()
+        if (!address || address === '地址') continue
+        if (newAddresses.has(address)) {
+          restoreCount++ // 這筆已被搬回在架
+        } else {
+          inactiveRows.push(prevInactive[i]) // 繼續保留在下架
+        }
       }
-    })
-    await batchUpdateSheetData(SHEET_ID, batchUpdates)
+    } catch { }
 
-    // 新增新列
-    if (rowsToAdd.length > 0) {
-      await appendSheetData(SHEET_ID, '物件總表!A1', rowsToAdd)
+    // 清空並重寫兩個分頁
+    await clearSheet(SHEET_ID, '物件總表!A:Z')
+    await appendSheetData(SHEET_ID, '物件總表!A1', [REQUIRED_COLUMNS, ...activeRows])
+
+    await clearSheet(SHEET_ID, '下架物件!A:Z')
+    if (inactiveRows.length > 0) {
+      await appendSheetData(SHEET_ID, '下架物件!A1', [REQUIRED_COLUMNS, ...inactiveRows])
+    } else {
+      await appendSheetData(SHEET_ID, '下架物件!A1', [REQUIRED_COLUMNS])
     }
-
-    // 隱藏下架列 / 取消隱藏重新出現的列
-    const sheetTabId = await ensureSheetExists(SHEET_ID, '物件總表')
-    const hideOps = [
-      ...hideRowIndices.map(r => ({ rowIndex: r, hide: true })),
-      ...unhideRowIndices.map(r => ({ rowIndex: r, hide: false })),
-    ]
-    await batchHideUnhideRows(SHEET_ID, sheetTabId, hideOps)
 
     return NextResponse.json({
       processedCount: ragicData.length,
       newCount,
       updateCount,
-      hideCount,
+      offlineCount,
+      restoreCount,
       errorCount,
       errors: errors.length > 0 ? errors : null,
-      message: `✅ 新增 ${newCount} 筆，更新 ${updateCount} 筆，隱藏 ${hideCount} 筆`,
+      message: `✅ 新增 ${newCount} 筆，更新 ${updateCount} 筆，下架 ${offlineCount} 筆，恢復 ${restoreCount} 筆`,
     })
   } catch (error: any) {
     console.error('Upload error:', error)
-    return NextResponse.json(
-      { error: error.message || '上傳失敗' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: error.message || '上傳失敗' }, { status: 500 })
   }
 }
