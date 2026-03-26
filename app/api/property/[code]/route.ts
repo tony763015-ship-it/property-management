@@ -13,7 +13,7 @@ export async function GET(request: NextRequest, { params }: { params: { code: st
     if (allData.length < 2) return NextResponse.json({ error: '找不到物件' }, { status: 404 })
 
     const headers = allData[0]
-    const row = allData.slice(1).find(r => (r[0] || '').toString().trim() === code)
+    const row = allData.slice(1).find(r => (r[0] || '').toString().trim().toUpperCase() === code.toUpperCase())
     if (!row) return NextResponse.json({ error: '找不到物件' }, { status: 404 })
 
     // 組成物件資料
