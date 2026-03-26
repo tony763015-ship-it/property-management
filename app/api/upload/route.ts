@@ -141,6 +141,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const now = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' })
+    const INACTIVE_COLUMNS = [...REQUIRED_COLUMNS, '下架時間']
+
     // 找出需要移到下架分頁的物件（原本在架但新 Excel 沒有）
     const inactiveRows: string[][] = []
     try {
@@ -149,9 +152,11 @@ export async function POST(request: NextRequest) {
         const address = (activeData[i][4] || '').toString().toLowerCase().trim()
         if (!address || address === '地址') continue
         if (!newAddresses.has(address)) {
-          // 移到下架分頁，狀態改為下架
           const row = [...activeData[i]]
           row[1] = '下架'
+          // 補齊欄位數到 REQUIRED_COLUMNS 長度，再加下架時間
+          while (row.length < REQUIRED_COLUMNS.length) row.push('')
+          row.push(now)
           inactiveRows.push(row)
           offlineCount++
         }
@@ -165,9 +170,12 @@ export async function POST(request: NextRequest) {
         const address = (prevInactive[i][4] || '').toString().toLowerCase().trim()
         if (!address || address === '地址') continue
         if (newAddresses.has(address)) {
-          restoreCount++ // 這筆已被搬回在架
+          restoreCount++
         } else {
-          inactiveRows.push(prevInactive[i]) // 繼續保留在下架
+          const row = [...prevInactive[i]]
+          // 若舊資料沒有下架時間欄，補上空字串
+          while (row.length < INACTIVE_COLUMNS.length) row.push('')
+          inactiveRows.push(row)
         }
       }
     } catch { }
@@ -177,11 +185,7 @@ export async function POST(request: NextRequest) {
     await appendSheetData(SHEET_ID, '物件總表!A1', [REQUIRED_COLUMNS, ...activeRows])
 
     await clearSheet(SHEET_ID, '下架物件!A:Z')
-    if (inactiveRows.length > 0) {
-      await appendSheetData(SHEET_ID, '下架物件!A1', [REQUIRED_COLUMNS, ...inactiveRows])
-    } else {
-      await appendSheetData(SHEET_ID, '下架物件!A1', [REQUIRED_COLUMNS])
-    }
+    await appendSheetData(SHEET_ID, '下架物件!A1', [INACTIVE_COLUMNS, ...inactiveRows])
 
     return NextResponse.json({
       processedCount: ragicData.length,
